@@ -159,6 +159,95 @@ def main():
 
     safe("golden_play.3", golden_play)
 
+    # ---- 4) v3: 多牌型黄金 + state 字段探测 + agent 方法签名 ----
+    def probe_v3():
+        import numpy as np
+        out = {}
+        rng = np.random.default_rng(9)
+        level = int(rng.integers(2, 15))
+        hands = cards.deal_hands(seed=900)
+        from danzero.engine.tribute import perform_tribute
+        from danzero.engine.game import GuanDanRound
+        res = perform_tribute([h.copy() for h in hands], list(rng.permutation(4)), level)
+        rnd = GuanDanRound(level=level, hands=hands, first_player=res[1],
+                           team_levels=(level, level))
+        obs = rnd.get_observation()
+        st = rnd.state
+        out["state_vars"] = {k: f"{type(v).__name__} len={len(v)}" if hasattr(v, "__len__")
+                             else repr(v)[:60] for k, v in vars(st).items()}
+        out["obs_vars"] = {k: f"{type(v).__name__} shape={getattr(v, 'shape', '')}"
+                           for k, v in vars(obs).items()} if hasattr(obs, "__dict__")             else {"__slots__": list(getattr(obs, "__slots__", []))}
+        # 推进几手让历史非空
+        for _ in range(8):
+            if obs is None or rnd.done:
+                break
+            obs = rnd.step(int(rng.integers(obs.legal_plays.shape[0])))
+        out["state_vars_after8"] = {k: f"{type(v).__name__} len={len(v)}"
+                                    for k, v in vars(st).items() if hasattr(v, "__len__")}
+        # 多牌型黄金: 按 ptype 分组采样
+        if obs is not None and not rnd.done:
+            groups = {}
+            for j in range(obs.legal_plays.shape[0]):
+                pt = actions.play_type_of(obs.legal_plays[j])
+                groups.setdefault(pt, []).append(j)
+            samples = []
+            for pt, idxs in groups.items():
+                for j in idxs[:3]:
+                    try:
+                        samples.append({
+                            "ptype": pt,
+                            "vec": [int(x) for x in obs.legal_plays[j]],
+                            "tokens": [int(x) for x in tk.tokenize_play(
+                                obs.legal_plays[j], obs.player, level - 2)]})
+                    except Exception as e:
+                        samples.append({"ptype": pt, "err": f"{type(e).__name__}: {e}"})
+            out["golden_multi"] = samples
+            # state 级黄金: 用探测到的 list 字段做 play_history
+            hist_key = None
+            for k, v in vars(st).items():
+                if isinstance(v, list) and len(v) >= 8:
+                    hist_key = k
+                    break
+            out["hist_key"] = hist_key
+            if hist_key:
+                for name in ("tribute_records", "tribute", "tributes", None):
+                    trib = vars(st).get(name) if name else res[0]
+                    if trib is None:
+                        continue
+                    try:
+                        out["state_golden"] = [int(x) for x in tk.tokenize_state(
+                            level, trib, vars(st)[hist_key], obs.player)]
+                        out["state_golden_trib_key"] = name
+                        break
+                    except Exception as e:
+                        out.setdefault("state_golden_errors", []).append(
+                            f"trib={name}: {type(e).__name__}: {e}")
+        return out
+
+    safe("probe.v3", probe_v3)
+
+    def probe_agent_methods():
+        import danzero.eval.agents as ag
+        out = {}
+        for cls_name in ("EvalAgent", "TransformerAgent"):
+            cls = getattr(ag, cls_name, None)
+            if cls is None:
+                continue
+            methods = {}
+            for m in dir(cls):
+                if m.startswith("_") and m not in ("__init__",):
+                    continue
+                f = getattr(cls, m, None)
+                if callable(f):
+                    try:
+                        methods[m] = f"{__import__('inspect').signature(f)} | {(getattr(f, '__doc__', '') or '')[:300]}"
+                    except (TypeError, ValueError):
+                        methods[m] = str(getattr(f, "__doc__", ""))[:200]
+            out[cls_name] = methods
+        return out
+
+    safe("agents.methods", probe_agent_methods)
+
     safe("golden.42", lambda: golden(42))
     safe("golden.7", lambda: golden(7))
 
