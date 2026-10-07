@@ -1,0 +1,30 @@
+name: danlm-dump
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Clone DanLM (public repo)
+        run: git clone --depth 1 https://github.com/dashidhy/DanLM
+
+      - name: Install deps
+        run: pip install numpy torch
+
+      - name: Run dump
+        run: python mac_dump.py
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: danlm_dump
+          path: danlm_dump.json
+          if-no-files-found: error
