@@ -270,13 +270,17 @@ def main():
         log = []
         def hook(module, args, kwargs, output):
             try:
-                log.append({
-                    "tokens": args[0].tolist() if len(args) > 0 else kwargs.get("tokens").tolist(),
-                    "lengths": (args[1].tolist() if len(args) > 1
-                                else kwargs.get("lengths").tolist()),
-                    "feats": (args[2].tolist() if len(args) > 2
-                              else kwargs.get("feats").tolist()),
-                })
+                rec = {"n_args": len(args), "kw_keys": list(kwargs.keys())}
+                for i, a in enumerate(args):
+                    rec[f"arg{i}_shape"] = list(a.shape) if hasattr(a, "shape") else None
+                    if i != 0 or True:
+                        v = a.tolist() if hasattr(a, "tolist") else a
+                        if isinstance(v, list) and len(v) and isinstance(v[0], list) and len(v[0]) > 40:
+                            v = v  # keep full
+                        rec[f"arg{i}"] = v
+                for k, a in kwargs.items():
+                    rec[f"kw_{k}"] = a.tolist() if hasattr(a, "tolist") else str(a)[:100]
+                log.append(rec)
             except Exception as e:
                 log.append({"hook_err": f"{type(e).__name__}: {e}"})
         model.register_forward_hook(hook, with_kwargs=True)
@@ -315,7 +319,7 @@ def main():
             new_trick = obs2 is not None and obs2.is_leading and rnd.state.lead_player == obs2.player
             agent.observe_action(p, play, new_trick)
             obs = obs2
-        return {"level": level, "decisions": decisions[:6], "fwd_total": len(log)}
+        return {"level": level, "decisions": decisions[:2], "fwd_total": len(log)}
 
     safe("behavior.diff", behavior_diff)
 
