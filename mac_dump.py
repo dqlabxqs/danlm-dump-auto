@@ -62,8 +62,15 @@ def main():
     for fn in ("tokenize_state", "tokenize_state_prefix", "tokenize_play",
                "tokenize_play_entry", "tokenize_finished", "tokenize_tribute_records",
                "tokenize_anti_tribute", "tokenize_tribute_give", "tokenize_tribute_back"):
-        safe(f"sig.{fn}", lambda f=fn: str(inspect.signature(getattr(tk, f, None))) + " | " +
-             str((getattr(tk, f, None) or).__doc__ or "")[:200])
+        def _sig(f=fn):
+            func = getattr(tk, f, None)
+            if func is None:
+                return "(missing)"
+            try:
+                return f"{inspect.signature(func)} | {(func.__doc__ or '')[:200]}"
+            except (TypeError, ValueError):
+                return "(builtin) | " + str((func.__doc__ or "")[:200])
+        safe(f"sig.{fn}", _sig)
 
     # ---- 3) 黄金测试向量：构造一局，记录每步 tokenize_state 输出 ----
     def golden(seed):
