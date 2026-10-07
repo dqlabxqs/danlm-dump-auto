@@ -248,6 +248,77 @@ def main():
 
     safe("agents.methods", probe_agent_methods)
 
+    # ---- 5) v4: 行为差分——forward hook 截获网络真实输入 ----
+    def behavior_diff():
+        import dataclasses
+        import numpy as np
+        import torch
+        import danzero.eval.agents as ag
+        from danzero.model.transformer import TransformerConfig, TransformerQNetwork
+        from danzero.engine.tribute import perform_tribute
+        from danzero.engine.game import GuanDanRound
+
+        ck = torch.load(str(ROOT / "ckpts/DanLM_v1/dansformer_v1_best_eval.pt"),
+                        map_location="cpu", weights_only=False)
+        raw = ck.get("model_config") or ck.get("config", {})
+        valid = {f.name for f in dataclasses.fields(TransformerConfig)}
+        tcfg = TransformerConfig(**{k: v for k, v in raw.items() if k in valid})
+        model = TransformerQNetwork(tcfg)
+        model.load_state_dict(ck.get("model_state_dict") or ck["model"])
+        model.eval()
+
+        log = []
+        def hook(module, args, kwargs, output):
+            try:
+                log.append({
+                    "tokens": args[0].tolist() if len(args) > 0 else kwargs.get("tokens").tolist(),
+                    "lengths": (args[1].tolist() if len(args) > 1
+                                else kwargs.get("lengths").tolist()),
+                    "feats": (args[2].tolist() if len(args) > 2
+                              else kwargs.get("feats").tolist()),
+                })
+            except Exception as e:
+                log.append({"hook_err": f"{type(e).__name__}: {e}"})
+        model.register_forward_hook(hook, with_kwargs=True)
+
+        agent = ag.create_agent_from_model(model, "transformer")
+
+        rng = np.random.default_rng(777)
+        level = int(rng.integers(2, 15))
+        hands = cards.deal_hands(seed=777)
+        res = perform_tribute([h.copy() for h in hands], list(rng.permutation(4)), level)
+        rnd = GuanDanRound(level=level, hands=hands, first_player=res[1],
+                           team_levels=(level, level))
+        agent.reset(0, level)
+        agent.notify_tribute(res[0])
+        obs = rnd.get_observation()
+        decisions = []
+        for step in range(200):
+            if obs is None or rnd.done:
+                break
+            p = obs.player
+            if p == 0:
+                n_before = len(log)
+                q = agent.get_q_values(obs, rnd)
+                i = agent.select_play(obs, rnd)
+                decisions.append({
+                    "step": step, "level": level,
+                    "legal_plays": obs.legal_plays.tolist(),
+                    "q": q.tolist(), "chosen": int(i),
+                    "hand": obs.state.hands[0].tolist(),
+                    "fwd": log[n_before:] if len(log) > n_before else None,
+                })
+            else:
+                i = int(rng.integers(obs.legal_plays.shape[0]))
+            play = obs.legal_plays[i]
+            obs2 = rnd.step(i)
+            new_trick = obs2 is not None and obs2.is_leading and rnd.state.lead_player == obs2.player
+            agent.observe_action(p, play, new_trick)
+            obs = obs2
+        return {"level": level, "decisions": decisions[:6], "fwd_total": len(log)}
+
+    safe("behavior.diff", behavior_diff)
+
     safe("golden.42", lambda: golden(42))
     safe("golden.7", lambda: golden(7))
 
