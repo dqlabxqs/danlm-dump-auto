@@ -305,7 +305,7 @@ def main():
                     "step": step, "level": level,
                     "legal_plays": obs.legal_plays.tolist(),
                     "q": q.tolist(), "chosen": int(i),
-                    "hand": obs.state.hands[0].tolist(),
+                    "hand": obs.hand.tolist(),
                     "fwd": log[n_before:] if len(log) > n_before else None,
                 })
             else:
