@@ -348,6 +348,41 @@ def main():
 
     safe("model.docs", model_docs)
 
+    # ---- 7) v7: self_abs 扫描——对黄金输入重放四种 self_abs 的 Q 值 ----
+    def selfabs_scan():
+        import torch as th
+        bd_out = OUT.get("behavior.diff")
+        if not isinstance(bd_out, dict):
+            return "no behavior.diff"
+        decs = bd_out.get("decisions") or []
+        if not decs or not decs[0].get("fwd"):
+            return "no decisions"
+        f = decs[0]["fwd"][0]
+        if "arg0" not in f:
+            return "no fwd args"
+        toks = th.tensor(f["arg0"])
+        lens = th.tensor(f["arg1"])
+        hand = th.tensor(f["arg2"], dtype=th.float32)
+        act = th.tensor(f["arg3"], dtype=th.float32)
+        import dataclasses
+        from danzero.model.transformer import TransformerConfig, TransformerQNetwork
+        ck = th.load(str(ROOT / "ckpts/DanLM_v1/dansformer_v1_best_eval.pt"),
+                     map_location="cpu", weights_only=False)
+        raw = ck.get("model_config") or ck.get("config", {})
+        valid = {fl.name for fl in dataclasses.fields(TransformerConfig)}
+        tcfg = TransformerConfig(**{k: v for k, v in raw.items() if k in valid})
+        model = TransformerQNetwork(tcfg)
+        model.load_state_dict(ck.get("model_state_dict") or ck["model"])
+        model.eval()
+        out = {}
+        with th.no_grad():
+            for sa in (0, 1, 2, 3):
+                q = model(toks, lens, hand, act, self_abs=th.tensor([sa]))
+                out[f"q{sa}"] = [round(float(x), 4) for x in q[0].tolist()]
+        return out
+
+    safe("selfabs.scan", selfabs_scan)
+
     safe("golden.42", lambda: golden(42))
     safe("golden.7", lambda: golden(7))
 
