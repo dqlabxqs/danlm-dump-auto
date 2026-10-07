@@ -240,7 +240,7 @@ def main():
                 f = getattr(cls, m, None)
                 if callable(f):
                     try:
-                        methods[m] = f"{__import__('inspect').signature(f)} | {(getattr(f, '__doc__', '') or '')[:300]}"
+                        methods[m] = sig + " ---DOC--- " + str((getattr(f, "__doc__", "") or ""))[:3000]
                     except (TypeError, ValueError):
                         methods[m] = str(getattr(f, "__doc__", ""))[:200]
             out[cls_name] = methods
