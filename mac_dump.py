@@ -323,6 +323,33 @@ def main():
 
     safe("behavior.diff", behavior_diff)
 
+    # ---- 6) v6: TransformerQNetwork 类完整方法文档 ----
+    def model_docs():
+        import inspect
+        import danzero.model.transformer as tr
+        out = {"dir": [a for a in dir(tr) if not a.startswith("_")]}
+        for cls_name in ("TransformerQNetwork", "Attention", "Block", "TransformerConfig"):
+            cls = getattr(tr, cls_name, None)
+            if cls is None:
+                continue
+            methods = {}
+            for m in dir(cls):
+                if m.startswith("_") and m != "__init__":
+                    continue
+                f = getattr(cls, m, None)
+                if callable(f):
+                    try:
+                        sig = str(inspect.signature(f))
+                    except (TypeError, ValueError):
+                        sig = "(?)"
+                    methods[m] = f"{sig}
+---DOC---
+{(getattr(f, '__doc__', '') or '')[:3000]}"
+            out[cls_name] = methods
+        return out
+
+    safe("model.docs", model_docs)
+
     safe("golden.42", lambda: golden(42))
     safe("golden.7", lambda: golden(7))
 
