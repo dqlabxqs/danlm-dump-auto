@@ -342,9 +342,7 @@ def main():
                         sig = str(inspect.signature(f))
                     except (TypeError, ValueError):
                         sig = "(?)"
-                    methods[m] = f"{sig}
----DOC---
-{(getattr(f, '__doc__', '') or '')[:3000]}"
+                    methods[m] = sig + " ---DOC--- " + str((getattr(f, "__doc__", "") or ""))[:3000]
             out[cls_name] = methods
         return out
 
