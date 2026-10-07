@@ -162,8 +162,12 @@ def main():
     safe("golden.42", lambda: golden(42))
     safe("golden.7", lambda: golden(7))
 
-    Path("danlm_dump.json").write_text(json.dumps(OUT, ensure_ascii=False, indent=1),
-                                        encoding="utf-8")
+    def _dump(out):
+        Path("danlm_dump.json").write_text(
+            json.dumps(out, ensure_ascii=False, indent=1,
+                       default=lambda o: o.item() if hasattr(o, "item") else str(o)),
+            encoding="utf-8")
+    _dump(OUT)
     print("\nwritten danlm_dump.json  ->  发回 Windows 侧应用")
 
 
@@ -173,4 +177,7 @@ if __name__ == "__main__":
     except Exception:
         traceback.print_exc()
         OUT["__fatal__"] = traceback.format_exc()
-        Path("danlm_dump.json").write_text(json.dumps(OUT, indent=1), encoding="utf-8")
+        Path("danlm_dump.json").write_text(
+            json.dumps(OUT, indent=1,
+                       default=lambda o: o.item() if hasattr(o, "item") else str(o)),
+            encoding="utf-8")
